@@ -1,5 +1,5 @@
 #
-#        Copyright (C) 2000-2021 the YAMBO team
+#        Copyright (C) 2000-2022 the YAMBO team
 #              http://www.yambo-code.org
 #
 # Authors (see AUTHORS file for details): AF
@@ -23,16 +23,11 @@
 #
 AC_DEFUN([AC_HAVE_IOTK],[
 
-AC_ARG_ENABLE(iotk, AC_HELP_STRING([--enable-iotk],
-            [Activate the IOTK support]),[],[enable_iotk="yes"])
-AC_ARG_WITH(iotk_libs, AC_HELP_STRING([--with-iotk-libs=<libs>],
-            [Use the IOTK library in <libs>],[32]),[],[])
-AC_ARG_WITH(iotk_path, AC_HELP_STRING([--with-iotk-path=<path>],
-            [Path to the IOTK install directory],[32]),[],[])
-AC_ARG_WITH(iotk_libdir, AC_HELP_STRING([--with-iotk-libdir=<path>],
-            [Path to the IOTK lib directory],[32]))
-AC_ARG_WITH(iotk_includedir, AC_HELP_STRING([--with-iotk-includedir=<path>],
-            [Path to the IOTK include directory],[32]),[],[])
+AC_ARG_ENABLE(iotk, AS_HELP_STRING([--enable-iotk],[Activate the IOTK support]),[],[enable_iotk="yes"])
+AC_ARG_WITH(iotk_libs, AS_HELP_STRING([--with-iotk-libs=<libs>],[Use the IOTK library in <libs>],[32]),[],[])
+AC_ARG_WITH(iotk_path, AS_HELP_STRING([--with-iotk-path=<path>],[Path to the IOTK install directory],[32]),[],[])
+AC_ARG_WITH(iotk_libdir, AS_HELP_STRING([--with-iotk-libdir=<path>],[Path to the IOTK lib directory],[32]))
+AC_ARG_WITH(iotk_includedir, AS_HELP_STRING([--with-iotk-includedir=<path>],[Path to the IOTK include directory],[32]),[],[])
 
 compile_p2y="no"
 compile_iotk="no"
@@ -119,7 +114,7 @@ fi
 PW_VER="no-hdf5-support"
 PW_CPP=
 #
-#if test x"$hdf5" = "xyes" && test "$HDF5_VER" = "parallel"; then
+#if test x"$hdf5" = "xyes" && test "$IO_LIB_VER" = "parallel"; then
 if test x"$hdf5" = "xyes" && test x"$enable_hdf5_p2y_support" != "xno"; then
   PW_VER="hdf5-support"
   PW_CPP="-D_P2Y_QEXSD_HDF5"
@@ -132,6 +127,7 @@ AC_SUBST(PW_CPP)
 AC_SUBST(compile_p2y)
 AC_SUBST(compile_iotk)
 AC_SUBST(internal_iotk)
+#
 AC_SUBST(IOTK_INCS)
 AC_SUBST(IOTK_LIBS)
 #

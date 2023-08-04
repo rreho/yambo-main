@@ -1,5 +1,5 @@
 !
-!        Copyright (C) 2000-2021 the YAMBO team
+!        Copyright (C) 2000-2022 the YAMBO team
 !              http://www.yambo-code.org
 !
 ! Authors (see AUTHORS file for details): AM
@@ -32,24 +32,25 @@ subroutine ELPH_general_gFsq(k,en,Xk,Xen,q,BS_E_degs)
  use YPPm,                ONLY:EXCITONS_user_indexes,EXCITONS_n_user_states
  use YPP_ELPH,            ONLY:elph_steps,ph_broad
  use stderr,              ONLY:intc
- use interfaces,          ONLY:ELPH_alloc
+ use ELPH_intfcs,         ONLY:ELPH_alloc
  use ELPH,                ONLY:PH_W_debye,elph_nQ_used,ph_modes,&
 &                              gsqF_fan,gsqF_dw ,gsqF_ca_corr ,gsqF_life_bose ,&
 &                              gsqF_life_f ,elph_use_q_grid,PH_freqs_sq
- use IO_m,                ONLY:io_control,OP_RD,RD,DUMP,RD_CL
- use BS_solvers,          ONLY:BS_mat,BSS_eh_table
+ use IO_int,              ONLY:io_control
+ use IO_m,                ONLY:OP_RD,RD,DUMP,RD_CL
+ use BS_solvers,          ONLY:BS_mat,BSS_eh_table,BSS_n_eig
  use BS,                  ONLY:BS_K_dim,BS_bands
  use QP_m,                ONLY:QP_n_states,QP_table,QP_state,QP_nb,QP_nk,QP_states_simmetrize
  use LIVE_t,              ONLY:live_timing
  use parallel_m,          ONLY:PP_indexes,PP_indexes_reset,myid,PAR_nQ_bz
- use parallel_int,        ONLY:PP_redux_wait,PARALLEL_index 
+ use parallel_int,        ONLY:PP_wait,PP_redux_wait,PARALLEL_index 
  use functions,           ONLY:Fermi_fnc_derivative
  !
 #include<memory.h>
  !
  type(levels) ::en,Xen
  type(bz_samp)::k,Xk,q
- integer,  optional      ::BS_E_degs(:)
+ integer,  optional      ::BS_E_degs(BSS_n_eig)
  !
  ! Work Space (electrons)
  !
@@ -75,7 +76,7 @@ subroutine ELPH_general_gFsq(k,en,Xk,Xen,q,BS_E_degs)
  !I/O
  !
  integer           ::io_err,ID
- integer, external ::io_ELPH
+ integer, external ::io_gFsq
  !
  ! calculate q%weights
  !
@@ -89,6 +90,7 @@ subroutine ELPH_general_gFsq(k,en,Xk,Xen,q,BS_E_degs)
    !
    QP_nb=BS_bands(2)
    QP_nk=Xk%nibz
+   YAMBO_FREE(QP_state)
    YAMBO_ALLOC(QP_state,(QP_nb,QP_nk))
    QP_state=.FALSE.
    forall( i1=BS_bands(1):BS_bands(2) ) QP_state(i1,:)=.TRUE.
@@ -110,9 +112,9 @@ subroutine ELPH_general_gFsq(k,en,Xk,Xen,q,BS_E_degs)
  YAMBO_FREE(QP_table)
  !
  call io_control(ACTION=OP_RD,SEC=(/1/),MODE=DUMP,ID=ID)
- io_err=io_ELPH(ID,'gFsq')
+ io_err=io_gFsq(ID)
  !
- if (io_err/=0) return
+ if (io_err/=0) call error(' Error reading the gFsq databases!')
  !
  YAMBO_ALLOC(QP_table,(QP_n_states,3+n_sp_pol-1)) ! Read from the gFsq DB 
  !
@@ -128,7 +130,7 @@ subroutine ELPH_general_gFsq(k,en,Xk,Xen,q,BS_E_degs)
    else
      call io_control(ACTION=RD,SEC=(/iq+1/),ID=ID)
    endif
-   io_err=io_ELPH(ID,'gFsq')
+   io_err=io_gFsq(ID)
  enddo
  !
  ! Energy setup
@@ -165,8 +167,9 @@ subroutine ELPH_general_gFsq(k,en,Xk,Xen,q,BS_E_degs)
  enddo
  !
  QP_n_states_2do=count(QP_table_map(:,1)>0)
- call PP_redux_wait
+ call PP_wait()
  !
+ call msg('sr','Number of states to calculate ',QP_n_states_2do)
  call live_timing('gF^2 [el]',QP_n_states_2do*nq_loop)
  !
  do i1=1,QP_n_states_DB
@@ -220,7 +223,8 @@ subroutine ELPH_general_gFsq(k,en,Xk,Xen,q,BS_E_degs)
      !
      iqp=QP_table_map(i1,1)
      !
-     if (.not.state_is_2do(iqp)) cycle
+!     I do not understand this line I comment it
+!     if (.not.state_is_2do(iqp)) cycle
      !
      ch='g_sq_F_b_'//trim(intc(QP_table(iqp,1)))//'_k_'//trim(intc(QP_table(iqp,3)))
      call of_open_close(trim(ch),'ot')
@@ -272,11 +276,11 @@ subroutine ELPH_general_gFsq(k,en,Xk,Xen,q,BS_E_degs)
    call msg('s',' Processing '//trim(intc(EXCITONS_n_user_states))//' state(s)')
    !
    call PARALLEL_index(px,(/BS_K_dim(1)/))
-   call PP_redux_wait
+   call PP_wait()
    !
    do i_lambda=1,EXCITONS_n_user_states
      !
-     g_sq_F_exciton=0.
+     g_sq_F_exciton=0._SP
      !
      lambda=EXCITONS_user_indexes(i_lambda)
      !
@@ -297,8 +301,8 @@ subroutine ELPH_general_gFsq(k,en,Xk,Xen,q,BS_E_degs)
          ic    = QP_table_map(neh,1)
          iv    = QP_table_map(neh,2)
          !
-         g_sq_F_exciton(:)=g_sq_F_exciton(:)+abs(BS_mat(neh,i_l))**2.*& 
-&                         (g_sq_F(ic,:,1)+g_sq_F(ic,:,2)+g_sq_F(ic,:,3)&
+         g_sq_F_exciton(:)=g_sq_F_exciton(:)+abs(BS_mat(neh,i_l))**2*     & 
+&                         (g_sq_F(ic,:,1)+g_sq_F(ic,:,2)+g_sq_F(ic,:,3)   &
 &                         -g_sq_F(iv,:,1)-g_sq_F(iv,:,2)-g_sq_F(iv,:,3) )
        enddo
        !
@@ -307,6 +311,8 @@ subroutine ELPH_general_gFsq(k,en,Xk,Xen,q,BS_E_degs)
      enddo
      !
      call live_timing()
+     !
+     call PP_redux_wait(g_sq_F_exciton)
      !
      ch='g_sq_F_exc_state_'//trim(intc(lambda))
      call of_open_close(trim(ch),'ot')

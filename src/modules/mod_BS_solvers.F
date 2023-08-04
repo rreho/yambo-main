@@ -1,5 +1,5 @@
 !
-!        Copyright (C) 2000-2021 the YAMBO team
+!        Copyright (C) 2000-2022 the YAMBO team
 !              http://www.yambo-code.org
 !
 ! Authors (see AUTHORS file for details): AM
@@ -40,10 +40,10 @@ module BS_solvers
  ! Haydock
  !========== 
  type Haydock_vector
-   complex(SP), allocatable :: fragment(:)
+   complex(SP), allocatable :: fragment(:,:) ! (/ i_Tr; maxval(Xk%FGbz%N_mapped('kpts_in_T_gr')) /)
  end type Haydock_vector
  !
-#if defined _SLEPC && !defined _SLEPC_OFF
+#if defined _SLEPC && !defined _NL
  !
  ! Slepc
  !==========
@@ -67,7 +67,7 @@ module BS_solvers
  !=========
  type(IO_desc)    :: BSS_desc
  character(schlen):: BSS_mode
- complex(SP) :: BSS_Wd
+ complex(SP)      :: BSS_Wd
  integer  :: BSS_n_freqs
  integer  :: BSS_n_eig            !number of eigenvalues to find
  real(SP) :: BSS_er(2)
@@ -78,14 +78,12 @@ module BS_solvers
  logical  :: BSS_Vnl_included
  logical  :: BSS_uses_GreenF
  logical  :: BSS_perturbative_width
- logical  :: BSS_add_antiresonant
  logical  :: BSS_eels_to_eps
  logical  :: BSS_uses_pert_SOC=.FALSE.
- !
  logical  :: run_Haydock=.FALSE.
  logical  :: run_inversion=.FALSE.
  logical  :: run_Diago=.FALSE.
-#if defined _SLEPC && !defined _SLEPC_OFF
+#if defined _SLEPC && !defined _NL
  logical  :: run_Slepc=.FALSE.
 #endif
  !
@@ -101,6 +99,8 @@ module BS_solvers
  integer  :: Haydock_iterMAX
  real(SP) :: Haydock_threshold
  real(SP) :: Haydock_v0_mod
+ real(SP) :: FG_factor
+ logical  :: BSS_uses_FKE
  !
  ! Solvers (Slepc)
  !=========
@@ -133,6 +133,7 @@ module BS_solvers
    complex(SP), allocatable :: spectra(:,:)
  end type K_Inversion_data
  !
+ type(K_Inversion_data), save :: K_INV_PI_PH
  type(K_Inversion_data), save :: K_INV_EPS
  type(K_Inversion_data), save :: K_INV_PL
  !
@@ -143,6 +144,7 @@ module BS_solvers
  real(SP)   , allocatable :: BSS_eh_f(:)
  real(SP)   , allocatable :: BSS_eh_W(:)
  complex(SP), allocatable :: BSS_eh_Z(:)
+ real(SP)   , allocatable :: BSS_eh_f_RES(:)
  real(SP)   , allocatable :: BSS_eh_E_SOC_corr(:,:)
  complex(SP), allocatable :: BSS_dipoles_opt(:,:)
  !
@@ -311,7 +313,7 @@ module BS_solvers
    subroutine BSS_alloc( )
      use pars,      ONLY:IP,cZERO,rZERO
      use electrons, ONLY:n_sp_pol
-     use BS,        ONLY:BS_dip_size,l_BS_abs,l_BS_kerr,l_BS_dichroism
+     use BS,        ONLY:BS_dip_size,l_BS_optics
      integer :: i_g,i_size
      logical :: W_is_allocated,Z_is_allocated,E_SOC_is_allocated
      YAMBO_ALLOC(BSS_eh_table,(BS_H_dim,5))
@@ -320,7 +322,7 @@ module BS_solvers
      BSS_eh_table = 0
      BSS_eh_E     = rZERO
      BSS_eh_f     = rZERO
-     if (l_BS_abs.or.l_BS_kerr.or.l_BS_dichroism) then
+     if (l_BS_optics) then
        YAMBO_ALLOC(BSS_dipoles_opt,(BS_dip_size,BS_H_dim))
        BSS_dipoles_opt = cZERO
      endif
@@ -340,6 +342,8 @@ module BS_solvers
        YAMBO_ALLOC(BSS_eh_Z,(BS_H_dim))
        BSS_eh_Z = cZERO
      endif
+     YAMBO_ALLOC(BSS_eh_f_RES,(BS_H_dim))
+     BSS_eh_f_RES = rZERO
      if (E_SOC_is_allocated) then
        YAMBO_ALLOC(BSS_eh_E_SOC_corr,(2/n_sp_pol,BS_H_dim))
        BSS_eh_E_SOC_corr = rZERO
@@ -353,18 +357,20 @@ module BS_solvers
      YAMBO_FREE(BSS_eh_W)
      YAMBO_FREE(BSS_eh_f)
      YAMBO_FREE(BSS_eh_Z)
+     YAMBO_FREE(BSS_eh_f_RES)
      YAMBO_FREE(BSS_eh_E_SOC_corr)
    end subroutine
    !
-   subroutine BS_HAYVEC_alloc(V)
+   subroutine BS_HAYVEC_alloc(V,dom_k)
      use parallel_m,    ONLY:PAR_IND_T_Haydock
      type(Haydock_vector) :: V(BS_nT_grps)
      ! ws:
      integer :: i_g
+     integer :: dom_k(BS_nT_grps)
      !
      do i_g=1,BS_nT_grps
        if (.not.PAR_IND_T_Haydock%element_1D(i_g)) cycle
-       YAMBO_ALLOC(V(i_g)%fragment,(BS_T_grp(i_g)%size))
+       YAMBO_ALLOC(V(i_g)%fragment,(BS_T_grp(i_g)%size,dom_k(i_g)))
      enddo
    end subroutine BS_HAYVEC_alloc
    !

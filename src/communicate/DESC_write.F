@@ -1,5 +1,5 @@
 !
-!        Copyright (C) 2000-2021 the YAMBO team
+!        Copyright (C) 2000-2022 the YAMBO team
 !              http://www.yambo-code.org
 !
 ! Authors (see AUTHORS file for details): AM, DS
@@ -21,7 +21,7 @@
 ! Software Foundation, Inc., 59 Temple Place - Suite 330,Boston, 
 ! MA 02111-1307, USA or visit http://www.gnu.org/copyleft/gpl.txt.
 !
-subroutine DESC_write(dest,prefix,desc,range,skip_patt)
+subroutine DESC_write(dest,prefix,desc,d_range,skip_patt)
  !
  use pars,       ONLY:SP,msg_len
  use com,        ONLY:msg,com_compose_msg
@@ -32,7 +32,7 @@ subroutine DESC_write(dest,prefix,desc,range,skip_patt)
  character(*),           intent(in) :: dest
  character(*),           intent(in) :: prefix
  type(IO_desc),          intent(in) :: desc
- integer, optional,      intent(in) :: range(2)
+ integer, optional,      intent(in) :: d_range(2)
  character(*), optional, intent(in) :: skip_patt
  !
  ! Work Space
@@ -49,8 +49,8 @@ subroutine DESC_write(dest,prefix,desc,range,skip_patt)
  if (index(dest,"o ")>0) i_space=1
  !
  range_=(/1,desc%n/)
- if (present(range)) then
-   range_=range
+ if (present(d_range)) then
+   range_=d_range
  endif
  !
  var_len=msg_len-i_space-len(prefix)-1
@@ -75,10 +75,10 @@ subroutine DESC_write(dest,prefix,desc,range,skip_patt)
      if(desc%kind(i_d)=='d') call msg(dest,local_var,real(desc%dval(i_d),SP),INDENT=0,after_msg=local_term)
      if(desc%kind(i_d)=='c') call msg(dest,local_var,&
 &                                     (/real(desc%cval(i_d)),aimag(desc%cval(i_d))/),INDENT=0,after_msg=local_term)
-     if(desc%kind(i_d)=='s') call msg(dest,local_var,trim(desc%sval(i_d)),INDENT=0)
+     if(desc%kind(i_d)=='s') call msg(dest,local_var,trim(desc%sval(i_d)),INDENT=0,after_msg=local_term)
      if(desc%kind(i_d)=='l') then
-       if(     desc%lval(i_d)) call msg(dest,local_var,'yes',INDENT=0)
-       if(.not.desc%lval(i_d)) call msg(dest,local_var,'no',INDENT=0)
+       if(     desc%lval(i_d)) call msg(dest,local_var,'yes',INDENT=0,after_msg=local_term)
+       if(.not.desc%lval(i_d)) call msg(dest,local_var,'no',INDENT=0,after_msg=local_term)
      endif
    endif
  enddo

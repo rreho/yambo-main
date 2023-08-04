@@ -21,7 +21,7 @@
 # Software Foundation, Inc., 59 Temple Place - Suite 330,Boston,
 # MA 02111-1307, USA or visit http://www.gnu.org/copyleft/gpl.txt.
 #
-m4_include([config/version/version.m4])
+m4_include([include/version/version.m4])
 #
 CURRENT_DIR=`echo "$PWD" | sed -e "s/ /X/g"`
 if ! test -d $CURRENT_DIR ; then 
@@ -29,7 +29,6 @@ if ! test -d $CURRENT_DIR ; then
 fi
 #
 compdir=`echo "$PWD"`
-AC_SUBST(compdir)
 #
 AC_PREFIX_DEFAULT($PWD)
 if test "$prefix" = "NONE" ;      then prefix="$PWD" ; fi
@@ -40,11 +39,13 @@ AC_CONFIG_SRCDIR([driver/yambo.F])
 #
 # YAMBO SPECIFIC
 #
+m4_include([config/m4/yambo_remote_compilation_setup.m4])
 m4_include([config/m4/yambo_specific.m4])
-m4_include([config/m4/yambo_libraries.m4])
+m4_include([config/m4/yambo_driver.m4])
 # 
 #  General
 #
+m4_include([config/m4/acx_echo.m4])
 m4_include([config/m4/acx_misc.m4])
 m4_include([config/m4/acx_gmake.m4])
 m4_include([config/m4/acx_cpp.m4])
@@ -55,11 +56,18 @@ m4_include([config/m4/acx_get_mpi_kind.m4])
 m4_include([config/m4/acx_fortran_flags.m4])
 m4_include([config/m4/acx_mpi.m4])
 m4_include([config/m4/cuda.m4])
+m4_include([config/m4/acx_version.m4])
 m4_include([config/m4/acx_branch.m4])
+m4_include([config/m4/acx_IO_wrap_up.m4])
 # 
 #  Report
 #
+m4_include([config/m4/acx_stripe_subpath.m4])
 m4_include([config/m4/acx_report.m4])
+# ============================================================================
+# version.m4 -> version.h
+ACX_VERSION
+#
 # ============================================================================
 # Current branch
 ACX_BRANCH
@@ -72,7 +80,6 @@ AC_C_CONST
 AC_C_INLINE
 AC_FUNC_MALLOC
 AC_FUNC_REALLOC
-AC_FUNC_SETVBUF_REVERSED
 AC_FUNC_STAT
 AC_PROG_MAKE_SET
 # ============================================================================
@@ -106,15 +113,14 @@ AC_SUBST(MAKE)
 #AR 
 AC_CHECK_TOOL(AR, ar, false)
 test -z "$AR" && AR=ar
-test -z "$AR_FLAGS" && AR_FLAGS="-ru"
+test -z "$AR_FLAGS" && AR_FLAGS="-r"
 AC_SUBST(AR_FLAGS)
 #
 # ============================================================================
 #
 # C options specific for driver.c
 #
-AC_ARG_ENABLE(options_check, AC_HELP_STRING([--enable-options-check],
-              [Enable the command line options check in driver.c. Default is yes.]))
+AC_ARG_ENABLE(options_check, AS_HELP_STRING([--enable-options-check],[Enable the command line options check in driver.c. Default is yes.]))
 if test x"$enable_options_check" = "x"; then enable_options_check="yes"; fi
 if test x"$enable_options_check" = "xno"; then
  SAVE=$CFLAGS
@@ -136,8 +142,7 @@ AC_LANG_PUSH(Fortran)
 #
 # F90 extension
 #
-AC_ARG_WITH(f90ext, AC_HELP_STRING([--with-f90ext=<flags>],
-           [Use .<flags> Fortran 90 extension],[32]))
+AC_ARG_WITH(f90ext, AS_HELP_STRING([--with-f90ext=<flags>],[Use .<flags> Fortran 90 extension],[32]))
 if ! test -z "$with_f90ext"; then F90SUFFIX=".$with_f90ext"; fi
 case $F90SUFFIX in
  .f90)
@@ -163,7 +168,7 @@ FCFLAGS="$acx_save_fcflags $F90EXTFLAGS"
 #
 # OpenMP
 #
-AC_ARG_ENABLE(open-mp, AC_HELP_STRING([--enable-open-mp],[Enable OpenMP support]))
+AC_ARG_ENABLE(open-mp, AS_HELP_STRING([--enable-open-mp],[Enable OpenMP support]))
 if test x"$enable_open_mp" = "x"; then enable_open_mp="no"; fi
 OPENMPLIBS=" "
 def_openmp=" "
@@ -236,6 +241,7 @@ m4_include([config/urls/repos.list])
 m4_include([config/m4/blas.m4])
 m4_include([config/m4/lapack.m4])
 m4_include([config/m4/netcdf_f90.m4])
+m4_include([config/m4/hdf5_f90.m4])
 m4_include([config/m4/libxc.m4])
 m4_include([config/m4/fft.m4])
 m4_include([config/m4/futile.m4])
@@ -247,7 +253,7 @@ m4_include([config/m4/petsc_slepc.m4])
 AC_LANG_PUSH(Fortran)
 # ============================================================================
 # Yambo Libs
-AC_YAMBO_LIBRARIES
+AC_YDRIVER
 # ============================================================================
 # YDB/YAMBOpy
 ACX_SCRIPTS
@@ -265,8 +271,14 @@ AC_PETSC_SLEPC_SETUP
 # SCALAPACK/BLACS
 AC_SLK_SETUP
 # ============================================================================
+# HDF5 
+AC_HAVE_HDF5_F90
+# ============================================================================
 # NETCDF 
 AC_HAVE_NETCDF_F90
+# ============================================================================
+# I/O wrap-up 
+ACX_IO_WRAP_UP
 # ============================================================================
 # FUTILE library 
 AC_HAVE_FUTILE
@@ -286,11 +298,15 @@ AC_HAVE_CUDA
 # Prepare the REPORT file variables
 ACX_REPORT()
 # ============================================================================
+# Compilation dir
+AC_SUBST(compdir)
+# ============================================================================
 AC_CONFIG_HEADERS([include/headers/common/have_malloc.h:include/headers/common/have_malloc.h.in])
-AC_CONFIG_FILES([config/setup config/mk/defs.mk config/report config/msg_ydb
-                 src/wf_and_fft/sgfft.F
-                 sbin/make_makefile.sh sbin/objects_store.sh src/tools/.objects include/branch.inc
-                 include/driver/editor.h include/driver/version.h])
+AC_CONFIG_FILES([
+ config/setup config/mk/global/defs.mk config/report config/msg_ydb
+ src/wf_and_fft/sgfft.F src/tools/.objects  
+ config/mk/local/defs.mk config/mk/defs.mk sbin/compilation/helper.inc.sh
+ include/branch.inc include/driver/editor.h lib/archive/git.list ])
 #
 AC_OUTPUT
 #

@@ -1,5 +1,5 @@
 !
-!        Copyright (C) 2000-2021 the YAMBO team
+!        Copyright (C) 2000-2022 the YAMBO team
 !              http://www.yambo-code.org
 !
 ! Authors (see AUTHORS file for details): AM, DS
@@ -21,10 +21,11 @@
 ! Software Foundation, Inc., 59 Temple Place - Suite 330,Boston,
 ! MA 02111-1307, USA or visit http://www.gnu.org/copyleft/gpl.txt.
 !
-subroutine def_variable_elemental(ID,VAR,VAR_SZ,VAR_KIND,MENU,par_io_kind)
+subroutine def_variable_elemental(ID,VAR,VAR_SZ,VAR_KIND,MENU,dim_names,par_io_kind)
  !
  use netcdf
  use pars,       ONLY:SP,DP,IP,LP,schlen,lchlen,nf90_SP,DB_menu_length
+ use pars,       ONLY:IP_YIO,LP_YIO,SP_YIO,DP_YIO,CR_YIO
 #if !defined _io_lib
  use drivers,    ONLY:list_dbs
 #endif
@@ -38,12 +39,13 @@ subroutine def_variable_elemental(ID,VAR,VAR_SZ,VAR_KIND,MENU,par_io_kind)
  !
  implicit none
  !
- integer               :: ID
- character(*)          :: VAR
- integer               :: VAR_SZ
- integer               :: VAR_KIND
- integer               :: MENU          ! MENU = 1 (on) 0 (off)
- character(*),optional :: par_io_kind
+ integer     , intent(in) :: ID
+ character(*), intent(in) :: VAR
+ integer     , intent(in) :: VAR_SZ
+ integer     , intent(in) :: VAR_KIND
+ integer     , intent(in) :: MENU          ! MENU = 1 (on) 0 (off)
+ character(schlen), optional, intent(in) :: dim_names(:)
+ character(*),      optional, intent(in) :: par_io_kind
  !
  ! Work Space
  !
@@ -58,13 +60,11 @@ subroutine def_variable_elemental(ID,VAR,VAR_SZ,VAR_KIND,MENU,par_io_kind)
    !
    io_rec_pos(ID)=1
    !
-   ! Define var kind. Notice that SP=IP, this is why I need to shift by 100
-   !
-   if(VAR_KIND==SP)     netcdf_var_kind=nf90_SP
-   if(VAR_KIND==DP)     netcdf_var_kind=nf90_double
-   if(VAR_KIND==IP+100) netcdf_var_kind=nf90_int
-   if(VAR_KIND==LP+100) netcdf_var_kind=nf90_byte
-   if(VAR_KIND==0 )     netcdf_var_kind=nf90_char
+   if(VAR_KIND==SP_YIO)     netcdf_var_kind=nf90_SP
+   if(VAR_KIND==DP_YIO)     netcdf_var_kind=nf90_double
+   if(VAR_KIND==IP_YIO)     netcdf_var_kind=nf90_int
+   if(VAR_KIND==LP_YIO)     netcdf_var_kind=nf90_byte
+   if(VAR_KIND==CR_YIO)     netcdf_var_kind=nf90_char
    !
 #if defined _PAR_IO
    !

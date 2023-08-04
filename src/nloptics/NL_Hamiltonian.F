@@ -1,5 +1,5 @@
 !
-!        Copyright (C) 2000-2021 the YAMBO team
+!        Copyright (C) 2000-2022 the YAMBO team
 !              http://www.yambo-code.org
 !
 ! Authors (see AUTHORS file for details): MG CA
@@ -31,23 +31,21 @@ subroutine NL_Hamiltonian(E,k,q,X,Time,i_time,V_bands)
  use units,          ONLY:SPEED_OF_LIGHT
  use electrons,      ONLY:levels,n_sp_pol
  use R_lattice,      ONLY:bz_samp
- use zeros,          ONLY:zero_dfl
  use drivers,        ONLY:l_use_Hxc_collisions
  use hamiltonian,    ONLY:rho_n,H_nl_sc,V_hartree_sc,V_xc_sc
  use QP_m,           ONLY:QP_nk
  use X_m,            ONLY:global_gauge,X_t
  use fields,         ONLY:A_ext,A_tot,Efield
  use real_time,      ONLY:eval_DFT,eval_HARTREE,l_RT_induced_Field,rho_reference,&
-&                         Ho_plus_Sigma,Phase_LifeTime,RT_Vnl_xc,RT_nbands         
+&                         Ho_plus_Sigma,RT_Vnl_xc,RT_nbands         
  use wave_func,      ONLY:WF
  use xc_functionals, ONLY:V_xc,XC_potential_driver
  use nl_optics,      ONLY:Correlation,V_xc_0,full_rho,IPA,E_full,LRC,JGM,LRCW,l_use_DIPOLES,NL_LRC_alpha,   &
 &                         NL_initial_P,E_tot,E_ext,E_ks,E_xc_0,I_relax,Alpha_ED,dG,eval_dG, & 
 &                         NL_bands,VAL_BANDS,NL_P
  use global_XC,      ONLY:WF_xc_functional,WF_kind
- use parallel_m,     ONLY:PAR_IND_Xk_ibz,PAR_COM_Xk_ibz_INDEX,PAR_Xk_ibz_index
- use parallel_int,   ONLY:PP_redux_wait
- use wrapper_omp,    ONLY:V_by_V_plus_V_omp
+ use parallel_m,     ONLY:PAR_IND_Xk_ibz,PAR_Xk_ibz_index
+ use wrapper_omp,    ONLY:M_plus_alpha_M_omp
  use collision_ext,  ONLY:COLLISIONS_have_HARTREE
  use H_interfaces,   ONLY:V_real_space_to_H
 #if defined _TIMING
@@ -60,7 +58,7 @@ subroutine NL_Hamiltonian(E,k,q,X,Time,i_time,V_bands)
  type(bz_samp), intent(in)    :: k,q
  real(SP),      intent(in)    :: Time
  type(X_t),     intent(in)    :: X
- complex(SP),   intent(in)    :: V_bands(NL_bands(2),QP_nk,n_sp_pol)
+ complex(SP),   intent(in)    :: V_bands(NL_bands(2),maxval(E%nbf),QP_nk,n_sp_pol)
  integer,       intent(in)    :: i_time
  !
  ! Working Space
@@ -73,31 +71,27 @@ subroutine NL_Hamiltonian(E,k,q,X,Time,i_time,V_bands)
  call timing('NL Hamiltonian',OPR='start')
 #endif
  !
- if(.not.l_use_Hxc_collisions.or..not.COLLISIONS_have_HARTREE) then
+ if(eval_HARTREE .or.  eval_DFT) then
    !
-   if(eval_HARTREE .or.  eval_DFT) then
-     !
-     call NL_build_valence_bands(E,V_bands,VAL_BANDS,NL_bands(1))
-     !
-     call el_density_vbands(E,k,rho_n,VAL_BANDS)
-     !
-   endif
+   call NL_build_valence_bands(E,V_bands,VAL_BANDS,NL_bands(1))
    !
-   if(eval_HARTREE) call V_Hartree(rho_n-rho_reference,V_hartree_sc)
+   call el_density_vbands(E,k,rho_n,VAL_BANDS)
    !
-   ! I reconstruct the full density if necessary because both TDDFT 
-   ! and JGM are not linear in rho_n and require the full density
-   ! 
-   if(eval_DFT) then
-     !
-     if(NL_bands(1)>1) rho_n=full_rho+rho_n-rho_reference
-     !
-     ! Reconstruct the full density
-     !
-     call XC_potential_driver(E,k,WF_kind,WF_xc_functional,1)
-     V_xc_sc=V_xc-V_xc_0
-     !
-   endif
+ endif
+ !
+ if(eval_HARTREE) call V_Hartree(rho_n-rho_reference,V_hartree_sc)
+ !
+ ! I reconstruct the full density if necessary because both TDDFT 
+ ! and JGM are not linear in rho_n and require the full density
+ ! 
+ if(eval_DFT) then
+   !
+   if(NL_bands(1)>1) rho_n=full_rho+rho_n-rho_reference
+   !
+   ! Reconstruct the full density
+   !
+   call XC_potential_driver(E,k,WF_kind,WF_xc_functional,1)
+   V_xc_sc=V_xc-V_xc_0
    !
  endif
  !
@@ -110,7 +104,9 @@ subroutine NL_Hamiltonian(E,k,q,X,Time,i_time,V_bands)
 #if defined _TIMING
    call timing('NL Hamiltonian',OPR='stop')
 #endif
-   call Berry_Polarization_NEQ(E,k,V_bands,NL_P(1:3))
+   do i_sp_pol=1,n_sp_pol
+     call Berry_Polarization_NEQ(E,k,i_sp_pol,V_bands(:,:E%nbf(i_sp_pol),:,i_sp_pol),NL_P(1:3))
+   enddo
 #if defined _TIMING
    call timing('NL Hamiltonian',OPR='start')
 #endif   
@@ -123,7 +119,7 @@ subroutine NL_Hamiltonian(E,k,q,X,Time,i_time,V_bands)
  ! Evaluate the external/total field
  !=================================
  !
- call RT_Ext_fields(A_ext,Time)
+ call RT_Ext_fields_sum(A_ext,Time)
  !
  A_tot=A_ext
  !
@@ -223,19 +219,19 @@ subroutine NL_Hamiltonian(E,k,q,X,Time,i_time,V_bands)
      !
      ! Use Sm1_plus, Sm1_minus and V_bands to build the W operator
      !
-     call  Build_W_operator(V_bands,E,k,A_tot,ik,i_sp_pol,H_nl_sc)
+     call  Build_W_operator(E,k,A_tot,ik,i_sp_pol,V_bands(:,:E%nbf(i_sp_pol),:,i_sp_pol),H_nl_sc)
      !
    endif                                                         
    !
    if(l_use_Hxc_collisions) then
-     call V_by_V_plus_V_omp(RT_nbands,cONE,RT_Vnl_xc(NL_bands(1):NL_bands(2),NL_bands(1):NL_bands(2),ik,i_sp_pol),&
+     call M_plus_alpha_M_omp(RT_nbands,cONE,RT_Vnl_xc(NL_bands(1):NL_bands(2),NL_bands(1):NL_bands(2),ik,i_sp_pol),&
 &                                            H_nl_sc(NL_bands(1):NL_bands(2),NL_bands(1):NL_bands(2)))
 
    endif
    !
    ! Damping: NL_damping fills the I_relax matrix 
    ! ================================================
-   call NL_damping(E,V_bands,ik,i_sp_pol)
+   call NL_damping(E,ik,i_sp_pol,V_bands(:,:E%nbf(i_sp_pol),ik,i_sp_pol))
    !
    ! Store the Hamiltonian
    ! =====================
@@ -246,9 +242,7 @@ subroutine NL_Hamiltonian(E,k,q,X,Time,i_time,V_bands)
 !$omp end parallel do
    !
   enddo  !---- loop on k-point
- enddo
- !
- if(Phase_LifeTime<zero_dfl) call PP_redux_wait(I_relax,COMM=PAR_COM_Xk_ibz_INDEX%COMM ) 
+ enddo  !---- loop in spin polarizations
  !
 #if defined _TIMING
  call timing('NL Hamiltonian',OPR='stop')

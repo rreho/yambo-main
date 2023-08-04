@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-#        Copyright (C) 2000-2021 the YAMBO team
+#        Copyright (C) 2000-2022 the YAMBO team
 #              http://www.yambo-code.org
 #
 # Authors (see AUTHORS file for details): CH
@@ -92,13 +92,13 @@ print "RENAMED files: $rinamefiles\n\n";
 #
 # Versions
 #
-open(VER,"<","config/version/version.m4");
+open(VER,"<","include/version/version.m4");
 while($line = <VER>) {
   chomp $line;
-  #$ID  = substr $line, 13, 1;
-  if ( $line =~ /SVERSION=/ ) {$SV = substr $line, 10, 1};
-  if ( $line =~ /SSUBVERSION=/ ) {$SS = substr $line, 13, 1};
-  if ( $line =~ /SPATCHLEVEL=/ ) {$SP = substr $line, 13, 1};
+  my @VERS = split /"/, $line;
+  if ( $line =~ /SVERSION=/ ) {$SV = $VERS[1];};
+  if ( $line =~ /SSUBVERSION=/ ) {$SS = $VERS[1]};
+  if ( $line =~ /SPATCHLEVEL=/ ) {$SP = $VERS[1]};
 }
 close(VER);
 $Revision=`git rev-list  --count HEAD`;

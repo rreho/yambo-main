@@ -1,5 +1,5 @@
 !
-!        Copyright (C) 2000-2021 the YAMBO team
+!        Copyright (C) 2000-2022 the YAMBO team
 !              http://www.yambo-code.org
 !
 ! Authors (see AUTHORS file for details): AM
@@ -31,7 +31,6 @@ subroutine IO_and_Messaging_switch(what,CONDITION)
 &                         write_fragments_IO_log,write_to_log_default
 #if ! defined _io_lib
  use LIVE_t,         ONLY:live_timing_is_on
- use C_driver,       ONLY:code_bin
  use timing_m,       ONLY:timing
 #endif
  !
@@ -111,8 +110,6 @@ subroutine IO_and_Messaging_switch(what,CONDITION)
      ! Mute
      !
      if (trim(ch_piece(ich))=="MUTE") then
-       IO_read           =.FALSE.
-       IO_write          =.FALSE.
        write_to_of       =.FALSE.
        write_to_report   =.FALSE.
        write_to_log      =.FALSE.
@@ -154,11 +151,6 @@ subroutine IO_and_Messaging_switch(what,CONDITION)
  endif
  !
 #if ! defined _io_lib
- !
- ! YPP cannot set to .TRUE. the write_to_report
- !
- if (index(code_bin,'ypp')>0) write_to_report = local_write_to_report
- !
  call timing('IO_and_Messaging_switch',OPR='stop')
 #endif
  !

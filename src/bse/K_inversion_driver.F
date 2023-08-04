@@ -1,5 +1,5 @@
 !
-!        Copyright (C) 2000-2021 the YAMBO team
+!        Copyright (C) 2000-2022 the YAMBO team
 !              http://www.yambo-code.org
 !
 ! Authors (see AUTHORS file for details): AM DS
@@ -24,20 +24,20 @@
 subroutine K_inversion_driver(iq,W,E,k,q) 
  !
  use pars,           ONLY:SP,pi
- use X_m,            ONLY:Epsilon_ii,X_drude_term,l_drude
- use BS_solvers,     ONLY:BSS_inversion_mode,BSS_desc,&
-&                         K_INV_EPS,BSS_add_antiresonant,K_Inversion_data,&
-&                         K_slk,K_inv_slk,BSS_eels_to_eps
- use BS,             ONLY:BS_H_dim,BS_Blocks_symmetrize_K,BS_blk
+ use X_m,            ONLY:Epsilon_ii,X_drude_term,l_drude,X_OUTPUT_driver
+ use BS_solvers,     ONLY:BSS_inversion_mode,BSS_desc,K_INV_PL,K_INV_EPS,&
+&                         K_Inversion_data,K_slk,K_inv_slk,BSS_eels_to_eps
+ use BS,             ONLY:BS_H_dim,BS_Blocks_symmetrize_K,BS_blk,l_BS_ares_from_res,&
+&                         BS_K_anti_resonant,l_BS_photolum,BS_res_ares_n_mat
  use electrons,      ONLY:levels
  use frequency,      ONLY:w_samp
  use R_lattice,      ONLY:bare_qpg,bz_samp
  use com,            ONLY:isec,msg
  use LIVE_t,         ONLY:live_timing
- use parallel_int,   ONLY:PP_redux_wait,PARALLEL_index,PARALLEL_live_message
- use parallel_m,     ONLY:PP_indexes,PP_indexes_reset,PAR_COM_SLK_INDEX_local,&
-&                         PAR_COM_SLK_INDEX_local
- use IO_m,           ONLY:io_control,REP,NONE,OP_WR_CL
+ use parallel_int,   ONLY:PP_wait,PP_redux_wait,PARALLEL_index,PARALLEL_live_message
+ use parallel_m,     ONLY:PP_indexes,PP_indexes_reset,PAR_COM_SLK_INDEX_local,PAR_COM_SLK_INDEX_local
+ use IO_int,         ONLY:io_control
+ use IO_m,           ONLY:REP,NONE,OP_WR_CL
  use matrix,         ONLY:MATRIX_reset
  use timing_m,       ONLY:timing
 #if defined _SCALAPACK
@@ -49,9 +49,6 @@ subroutine K_inversion_driver(iq,W,E,k,q)
 #endif
  use stderr,         ONLY:intc
  use descriptors,    ONLY:IO_desc_add
- !
- use BS,             ONLY:l_BS_photolum
- use BS_solvers,     ONLY:K_INV_PL
  use PHOTOLUM,       ONLY:BSS_PL_free,PL
  !
 #include<memory.h>
@@ -79,8 +76,13 @@ subroutine K_inversion_driver(iq,W,E,k,q)
  !
  ! I/O
  !
- integer           :: i_err,ID,Lo_dim,Lo_n_loop
+ integer           :: i_err,ID,Lo_dim
  integer, external :: io_BSS_invert
+ !
+ if (BS_res_ares_n_mat>1) then
+   call warning(" inversion solver coding not finalized for case with two BSE matricies ")
+   return
+ endif
  !
  call timing('Inversion Solver',OPR='start')
  !
@@ -166,24 +168,24 @@ subroutine K_inversion_driver(iq,W,E,k,q)
  ! IP-part Lo [also recompute Epsilon_xx(:,3) OR PL (needed in case of DbG)]
  !===========================================================================
  Lo_dim=1
- if (BSS_add_antiresonant) Lo_dim=2
- Lo_n_loop=Lo_dim
+ if (BS_K_anti_resonant.and.l_BS_ares_from_res) Lo_dim=2
  !
  ! In the PL case we need, in addition to the standard GF, also some additional L_k^(r)(w) A_k(w) L_k^(a)(w), where
  ! L^(a/r) are deduced from the standard components.
  !
  if (l_BS_photolum) then
    Lo_dim=2
-   if (BSS_add_antiresonant) Lo_dim=4
+   if (BS_K_anti_resonant.and.l_BS_ares_from_res) Lo_dim=4
  endif
  !
  YAMBO_ALLOC(Lo,(BS_H_dim,W%n_freqs,Lo_dim))
  !
- call K_inversion_Lo(iq,W,E,k,Lo_dim,Lo_n_loop,Lo)
+ call K_inversion_Lo(iq,W,E,k,Lo_dim,Lo)
  !
- ! Initialize the output file 
- !============================
- call K_output_file(iq,"open Inversion")
+ ! Initialize & write the output file 
+ !====================================
+ call X_OUTPUT_driver("DEF INIT",solver="Inversion") 
+ call K_OUTPUT(iq,W,"open Inversion close","ALL")
  !
  ! Perturbative Inversion
  !========================
@@ -197,7 +199,7 @@ subroutine K_inversion_driver(iq,W,E,k,q)
 &                              TOTAL=W%n_freqs,NCPU=PAR_COM_SLK_INDEX_local%n_CPU)
    call live_timing('Perturbative inversion ',PAR_IND_freqs%n_of_elements(PAR_IND_FREQ_ID))
    !
-   call K_inversion_engine("any",1,W%n_freqs,iq,PAR_IND_freqs,W,Lo,Lo_dim,Lo_n_loop,.FALSE.)
+   call K_inversion_engine("any",1,W%n_freqs,iq,PAR_IND_freqs,W,Lo,Lo_dim,.FALSE.)
    !
    call PP_redux_wait(K_INV_EPS%err,COMM=PAR_COM_SLK_INDEX_local%COMM)
    call PP_redux_wait(Epsilon_ii(:,2),COMM=PAR_COM_SLK_INDEX_local%COMM)
@@ -210,7 +212,7 @@ subroutine K_inversion_driver(iq,W,E,k,q)
    !
    K_INV_EPS%spectra(:,1)=Epsilon_ii(:,2)
    if (l_BS_photolum) then
-     K_INV_PL%spectra(:,1)=PL(:,2)
+     K_INV_PL%spectra(:,1)=cmplx(PL(:,2),0._SP,kind=SP)
      !
      call io_control(ACTION=OP_WR_CL,COM=NONE,SEC=(/1,2,3,4/),ID=ID)
      i_err=io_BSS_invert(iq,W,ID)
@@ -223,7 +225,7 @@ subroutine K_inversion_driver(iq,W,E,k,q)
    !
  endif
  !
- call K_output_file(iq,"Inversion")
+ call K_OUTPUT(iq,W,"override dump Inversion close","ALL")
  !
  ! Full Inversion
  !=================
@@ -257,12 +259,12 @@ subroutine K_inversion_driver(iq,W,E,k,q)
  !==================================================================
  call K_eps_interpolate(W%n_freqs,real(W%p),K_INV_EPS%err)
  !
- call PP_redux_wait()
+ call PP_wait()
  !
  ! I/O [after full inversion]
  !=====
  K_INV_EPS%spectra(:,1)=Epsilon_ii(:,2)
- if (l_BS_photolum) K_INV_PL%spectra(:,1)=PL(:,2)
+ if (l_BS_photolum) K_INV_PL%spectra(:,1)=cmplx(PL(:,2),0._SP,kind=SP)
  !
  if (l_BS_photolum) then
    call io_control(ACTION=OP_WR_CL,COM=REP,SEC=(/1,2,3,4/),ID=ID)
@@ -282,7 +284,7 @@ subroutine K_inversion_driver(iq,W,E,k,q)
  !
  call IO_desc_add(BSS_desc,kind="r",str="[INV] Converged frequencies",term="o/o",R=(/ratio/))
  !
- call K_output_file(iq,"Inversion")
+ call K_OUTPUT(iq,W,"override dump close Inversion","ALL")
  !
  ! CLEAN
  !
@@ -308,7 +310,7 @@ subroutine K_inversion_driver(iq,W,E,k,q)
        !
        iw=TYP%iw_full(i1)
        !
-       call K_inversion_engine(TYP%what,iw,1,iq,PAR_IND_freqs,W,Lo,Lo_dim,Lo_n_loop,.TRUE.)
+       call K_inversion_engine(TYP%what,iw,1,iq,PAR_IND_freqs,W,Lo,Lo_dim,.TRUE.)
        !
        call live_timing(steps=1)
        !

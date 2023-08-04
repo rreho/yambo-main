@@ -1,5 +1,5 @@
 !
-!        Copyright (C) 2000-2021 the YAMBO team
+!        Copyright (C) 2000-2022 the YAMBO team
 !              http://www.yambo-code.org
 !
 ! Authors (see AUTHORS file for details): AM, DS
@@ -24,10 +24,8 @@
 subroutine PARALLEL_global_indexes(E,Xk,q,ENVIRONMENT,X,Dip,RESET,Dip_limits_pre_defined)
  !
  ! LOGICALS
- use parallel_m,    ONLY:l_par_RT,l_par_SE,l_par_X_G,l_par_X_G_finite_q,l_par_NL
-#if defined _QED
- use parallel_m,    ONLY:l_par_SC
-#endif
+ use parallel_m,    ONLY:l_par_X_T,l_par_RT,l_par_SE,l_par_X_G,l_par_X_G_finite_q,&
+&                        l_par_DIP,l_par_BZINDX,l_par_NL,l_par_SC
  ! COMMUNICATORS
  use parallel_m,    ONLY:PAR_COM_CON_INDEX_X,PAR_COM_VAL_INDEX_X
  ! IND
@@ -41,9 +39,6 @@ subroutine PARALLEL_global_indexes(E,Xk,q,ENVIRONMENT,X,Dip,RESET,Dip_limits_pre
  use parallel_int,  ONLY:PARALLEL_index,PARALLEL_live_message
  use DIPOLES,       ONLY:DIPOLE_t
  use X_m,           ONLY:X_t,l_X_terminator
-#if defined _QED
- use parallel_m,    ONLY:l_par_SC
-#endif
  use electrons,     ONLY:levels
  use R_lattice,     ONLY:bz_samp
  use pars,          ONLY:SP
@@ -67,8 +62,7 @@ subroutine PARALLEL_global_indexes(E,Xk,q,ENVIRONMENT,X,Dip,RESET,Dip_limits_pre
  ! Response function kind
  !========================
  X_type=1
- if (present(X)) X_type=X%whoami
- !
+ if (present(X))                      X_type=X%whoami
  if (ENVIRONMENT=="Response_T_space") X_type=5
  !
  MORE=""
@@ -93,14 +87,16 @@ subroutine PARALLEL_global_indexes(E,Xk,q,ENVIRONMENT,X,Dip,RESET,Dip_limits_pre
  !==========
  ! Logicals
  !==========
+ !
+ l_par_BZINDX       =ENVIRONMENT=="BZ_Indexes"
+ l_par_DIP          =ENVIRONMENT=="DIPOLES"
+ l_par_X_T          =ENVIRONMENT=="Response_T_space"
  l_par_X_G_finite_q =ENVIRONMENT=="Response_G_space_and_IO"
  l_par_X_G          =ENVIRONMENT=="Response_G_space"
  l_par_SE           =ENVIRONMENT=="Self_Energy"
  l_par_RT           =ENVIRONMENT=="Real_Time"
  l_par_NL           =ENVIRONMENT=="Non_Linear"
-#if defined _QED
  l_par_SC           =ENVIRONMENT=="Self_Energy"
-#endif
  !
  !==================================
  ! USER provided PARALLEL structure
@@ -128,8 +124,8 @@ subroutine PARALLEL_global_indexes(E,Xk,q,ENVIRONMENT,X,Dip,RESET,Dip_limits_pre
    endif
    if (Do_dip_limits) then
      if (Dip%bands_ordered.or.Dip%Energy_treshold<0._SP) then
-       Dip%ib_lim(1)=E%nbm
-       Dip%ib_lim(2)=E%nbf+1
+       Dip%ib_lim(1)=maxval(E%nbm)
+       Dip%ib_lim(2)=minval(E%nbf)+1
        if (l_X_terminator) Dip%ib_lim(2)=Dip%ib(1)
      else
        Dip%ib_lim(1)=Dip%ib(2)
@@ -155,11 +151,13 @@ subroutine PARALLEL_global_indexes(E,Xk,q,ENVIRONMENT,X,Dip,RESET,Dip_limits_pre
  !
  if (index(ENVIRONMENT, "Response_G_space")>0) call PARALLEL_global_Response_G(E,Xk,q,ENVIRONMENT,X_type)
  !
+ if (      ENVIRONMENT=="BZ_Indexes")          call PARALLEL_global_BZINDX(E,Xk,q,ENVIRONMENT)
+ !
  if (      ENVIRONMENT=="DIPOLES")             call PARALLEL_global_DIPOLES(E,Xk,q,ENVIRONMENT)
  !
  if (      ENVIRONMENT=="Self_Energy")         call PARALLEL_global_Self_Energy(E,Xk,q)
  !
- if (      ENVIRONMENT=="Response_T_space")    call PARALLEL_global_Response_T(Xk,X_type)
+ if (      ENVIRONMENT=="Response_T_space")    call PARALLEL_global_Response_T_base(Xk)
  !
 #if defined _RT
  if (      ENVIRONMENT=="Real_Time")           call PARALLEL_global_Real_Time(E,Xk,q,X_type)
@@ -172,7 +170,7 @@ subroutine PARALLEL_global_indexes(E,Xk,q,ENVIRONMENT,X,Dip,RESET,Dip_limits_pre
 #if defined _SCALAPACK
  if (      ENVIRONMENT=="ScaLapacK")           call PARALLEL_global_ScaLapack( )
 #endif
-#if defined _ELPH
+#if defined _PHEL
  if (      ENVIRONMENT=="Phonon_Self_Energy")  call PARALLEL_global_Phonon_Self_Energy( )
 #endif
  !

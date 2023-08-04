@@ -1,5 +1,5 @@
 !
-!        Copyright (C) 2000-2021 the YAMBO team
+!        Copyright (C) 2000-2022 the YAMBO team
 !              http://www.yambo-code.org
 !
 ! Authors (see AUTHORS file for details): DS
@@ -23,7 +23,7 @@
 !
 subroutine XC_eval_lda_kernel(v1rho,v2rho2)
  !
- use pars,           ONLY:SP,DP
+ use pars,           ONLY:SP,DP,cZERO
  use xc_functionals, ONLY:F_xc,magn,xc_spin,xc_spin_map1
  use electrons,      ONLY:n_spin,n_spinor,n_sp_pol
  use FFT_m,          ONLY:fft_size
@@ -38,7 +38,9 @@ subroutine XC_eval_lda_kernel(v1rho,v2rho2)
  real(SP):: one_over_magn,mod_mag
  !
  if (n_spin==1) then
-   forall(ifft=1:fft_size) F_xc(ifft,1,1) = F_xc(ifft,1,1) + real(v2rho2(1,ifft),SP)
+   do ifft=1,fft_size
+     F_xc(ifft,1,1) = F_xc(ifft,1,1) + real(v2rho2(1,ifft),SP)
+   enddo
  endif
  !
  if (n_sp_pol==2) then
@@ -56,21 +58,16 @@ subroutine XC_eval_lda_kernel(v1rho,v2rho2)
        mod_mag=abs(magn(ifft,3))*real(fft_size,SP)/DL_vol
        if(mod_mag< 1.E-8_SP) one_over_magn=0._SP
        if(mod_mag>=1.E-8_SP) one_over_magn=1._SP/mod_mag
-       ! Here 1,1 means -+ and 22 +-
-       ! This happens because in the yambo convention the left indexes "v sigma_v, c sigma_c, k" are inverted
-       ! with respect to the standard convention, i.e. "c sigma_c, v sigma_v, k"
-       ! As a result f_\up\dn,\dn\up is in yambo f_\dn\up,\dn\up and so on
-       F_xc(ifft,1,1) = F_xc(ifft,1,1) + real(v1rho(1,ifft)-v1rho(2,ifft),SP)*one_over_magn
-       F_xc(ifft,2,2) = F_xc(ifft,2,2) + real(v1rho(1,ifft)-v1rho(2,ifft),SP)*one_over_magn
+       ! Here 1,2 means -+ and 21 +- (or viceversa, to be checked)
+       F_xc(ifft,1,2) = F_xc(ifft,1,2) + real(v1rho(1,ifft)-v1rho(2,ifft),SP)*one_over_magn
+       F_xc(ifft,2,1) = F_xc(ifft,2,1) + real(v1rho(1,ifft)-v1rho(2,ifft),SP)*one_over_magn
      enddo
-     ! Here 2,1 means -- and 12 ++ (or viceversa, to be checked)
-     F_xc(:,2,1)=F_xc(:,1,2)
+     ! Here 1,1 means -- and 22 ++ (or viceversa, to be checked)
+     F_xc(:,2,2)=F_xc(:,1,1)
    endif
  endif
  !
  if (n_spinor==2) then
-   ! To be coded ...
-   ! Here F_xc has 4 spin indexes. The old one is wrong
    do is1 = 1,n_spinor
      do is2 = 1,n_spinor
        is_xc = xc_spin_map1(is1,is2)

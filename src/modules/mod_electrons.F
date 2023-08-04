@@ -1,5 +1,5 @@
 !
-!        Copyright (C) 2000-2021 the YAMBO team
+!        Copyright (C) 2000-2022 the YAMBO team
 !              http://www.yambo-code.org
 !
 ! Authors (see AUTHORS file for details): AM
@@ -32,8 +32,8 @@ module electrons
  real(SP) :: spin_occ
  real(SP) :: filled_tresh
  integer  :: n_bands
- integer  :: n_met_bands
- integer  :: n_full_bands
+ integer  :: n_met_bands(2)
+ integer  :: n_full_bands(2)
  !
  ! Spin support
  !
@@ -59,6 +59,8 @@ module electrons
  real(SP)                 :: Orbital_magn(3)
  real(SP)                 :: Itinerant_magn(3)
  !
+ ! Fine grid
+ !-----------
  type E_fine_grid
    integer              :: nk
    integer              :: nb
@@ -66,15 +68,18 @@ module electrons
    real(SP), allocatable:: W(:,:,:)
    real(SP), allocatable:: f(:,:,:)
    real(SP), allocatable:: df(:,:,:)
+   real(SP)             :: E_Fermi
  end type E_fine_grid
  !
+ ! Levels 
+ !--------
  type levels
    !
-   integer         :: nb
-   integer         :: nk
-   integer         :: nbf
-   integer         :: nbm
-   integer         :: nbc(2)       ! Number of bands with NEQ carriers for yambo_rt
+   integer         :: nb                 ! Number of bands
+   integer         :: nk                 ! Numbef of k-points
+   integer         :: nbf(2)             ! 1-2 refers to spin polarizations
+   integer         :: nbm(2)
+   integer         :: nbc(2)             ! Number of bands with NEQ carriers for yambo_rt
    real(SP)        :: E_Fermi
    real(SP)        :: E_dir_gap(2)       ! 1-2 refers to spin polarizations
    real(SP)        :: E_ind_gap(2)
@@ -83,13 +88,13 @@ module electrons
    !
    ! QP corrections
    !
-   real(SP),   allocatable :: E(:,:,:)         
-   real(SP),   allocatable :: Eo(:,:,:)        
-   real(SP),   allocatable :: f(:,:,:)         
-   real(SP),   allocatable :: fo(:,:,:)        
+   real(SP),   allocatable :: E(:,:,:)        ! Kohn-Sham or Quasi-particle energies 
+   real(SP),   allocatable :: Eo(:,:,:)       ! Bare energies (Kohn-Sham) 
+   real(SP),   allocatable :: f(:,:,:)        ! Electronic occupation 
+   real(SP),   allocatable :: fo(:,:,:)       ! Bare electronic occupation 
    real(SP),   allocatable :: df(:,:,:)        
-   real(SP),   allocatable :: W(:,:,:)         
-   complex(SP),allocatable :: Z(:,:,:)         
+   real(SP),   allocatable :: W(:,:,:)        ! Imaginary part of the quasi-particle 
+   complex(SP),allocatable :: Z(:,:,:)        ! Renormalization factor 
    !
    ! Green Functions
    !

@@ -36,15 +36,6 @@ AC_ARG_WITH(libxc_includedir, [AS_HELP_STRING([--with-libxc-includedir=<path>],
 internal_libxc="no"
 compile_libxc="no"
 
-if test -d "$with_libxc_path"; then
-   libxc_incdir="$with_libxc_path/include"
-   libxc_libdir="$with_libxc_path/lib"
-fi
-if test -d "$with_libxc_includedir"; then libxc_incdir="$with_libxc_includedir" ; fi
-if test -d "$with_libxc_libdir";     then libxc_libdir="$with_libxc_libdir" ; fi
-
-LIBXC_INCS="$IFLAG$libxc_incdir"
-
 dnl Backup LIBS and FCFLAGS
 acx_libxc_save_LIBS="$LIBS"
 acx_libxc_save_FCFLAGS="$FCFLAGS"
@@ -54,61 +45,66 @@ AC_MSG_CHECKING([for libxc])
 
 dnl The following program should work with all version of libxc
 testprog="AC_LANG_PROGRAM([],[
-    use xc_f90_lib_m
+    use xc_f03_lib_m
     implicit none
 
     integer :: i
     i = XC_EXCHANGE
 ])"
 
-FCFLAGS="$LIBXC_INCS $acx_libxc_save_FCFLAGS"
 
 # set from environment variable, if not blank
 if test ! -z "$LIBXC_LIBS"; then
   LIBS="$LIBXC_LIBS"
+  FCFLAGS="$LIBXC_INCS $acx_libxc_save_FCFLAGS"
 dnl $acx_libxc_save_LIBS"
   AC_LINK_IFELSE($testprog, [acx_libxc_ok=yes], [])
 fi
 
-# set from --with-libxc-libs flag
-if test x"$acx_libxc_ok" = xno && test ! -z "$with_libxc_libs" ; then
-  LIBXC_LIBS="$with_libxc_libs"
+# set from configure flags
+if test x"$acx_libxc_ok" = xno ; then
+  #
+  LIBXC_LIBS="-lxcf90 -lxcf03 -lxc"
+  LIBXC_INCS=""
+  #
+  if test -d "$with_libxc_path"; then
+     libxc_incdir="$with_libxc_path/include"
+     libxc_libdir="$with_libxc_path/lib"
+  fi
+  if test -d "$with_libxc_includedir"; then libxc_incdir="$with_libxc_includedir" ; fi
+  if test -d "$with_libxc_libdir";     then libxc_libdir="$with_libxc_libdir" ; fi
+  #
+  # dynamic linkage, separate Fortran interface
+  if test ! -z "$libxc_libdir"; then LIBXC_LIBS="-L$libxc_libdir -lxcf90 -lxcf03 -lxc"; fi
+  if test ! -z "$libxc_incdir"; then LIBXC_INCS="$IFLAG$libxc_incdir"; fi
+  #
+  if test ! -z "$with_libxc_libs" ; then LIBXC_LIBS="$with_libxc_libs" ; fi
+  if test ! -z "$with_libxc_incs" ; then LIBXC_INCS="$with_libxc_incs" ; fi
+
   LIBS="$LIBXC_LIBS"
+  FCFLAGS="$LIBXC_INCS $acx_libxc_save_FCFLAGS"
+
 dnl $acx_libxc_save_LIBS"
   AC_LINK_IFELSE($testprog, [acx_libxc_ok=yes], [])
+  
+  # if dynamic / user provided linkage did not work, try static one
+  if test x"$acx_libxc_ok" = xno && test ! -z "$libxc_libdir"; then
+    LIBXC_LIBS="$libxc_libdir/libxcf90.a $libxc_libdir/libxcf03.a  $libxc_libdir/libxc.a"
+    LIBS="$LIBXC_LIBS"
+dnl $acx_libxc_save_LIBS"
+    AC_LINK_IFELSE($testprog, [acx_libxc_ok=yes], [])
+  fi
 fi
 
-# dynamic linkage, separate Fortran interface
-if test x"$acx_libxc_ok" = xno; then
-  LIBXC_LIBS="-L$libxc_libdir -lxcf90 -lxc"
-  LIBS="$LIBXC_LIBS"
-dnl $acx_libxc_save_LIBS"
-  AC_LINK_IFELSE($testprog, [acx_libxc_ok=yes], [])
-fi
 
-# static linkage, separate Fortran interface
-if test x"$acx_libxc_ok" = xno; then
-  LIBXC_LIBS="$libxc_libdir/libxcf90.a $libxc_libdir/libxc.a"
-  LIBS="$LIBXC_LIBS"
-dnl $acx_libxc_save_LIBS"
-  AC_LINK_IFELSE($testprog, [acx_libxc_ok=yes], [])
-fi
-
-# static linkage, combined Fortran interface (libxc pre-r10730)
-if test x"$acx_libxc_ok" = xno; then
-  LIBXC_LIBS="$libxc_libdir/libxc.a"
-  LIBS="$LIBXC_LIBS"
-dnl $acx_libxc_save_LIBS"
-  AC_LINK_IFELSE($testprog, [acx_libxc_ok=yes], [])
-fi
-
-# dynamic linkage, combined Fortran interface (libxc pre-r10730)
-if test x"$acx_libxc_ok" = xno; then
-  LIBXC_LIBS="-L$libxc_libdir -lxc"
-  LIBS="$LIBXC_LIBS"
-dnl $acx_libxc_save_LIBS"
-  AC_LINK_IFELSE($testprog, [acx_libxc_ok=yes], [])
-fi
+dnl The following programs will only work with specific version of libxc
+testprog_5x="AC_LANG_PROGRAM([],[
+  use xc_f03_lib_m
+  implicit none
+  type(xc_f03_func_t) :: p
+  real(selected_real_kind(14,200)) :: ext_params
+  call xc_f03_func_set_ext_params(p,(/ext_params/))
+])"
 
 dnl The following programs will only work with specific version of libxc
 testprog_4x="AC_LANG_PROGRAM([],[
@@ -162,11 +158,12 @@ if test x"$acx_libxc_ok" = xyes; then
 AC_LINK_IFELSE($testprog_11,  [acx_libxc_version=110, acx_libxc_ok=no ], [])
 AC_LINK_IFELSE($testprog_12,  [acx_libxc_version=120, acx_libxc_ok=no ], [])
 AC_LINK_IFELSE($testprog_20,  [acx_libxc_version=200, acx_libxc_ok=no ], [])
-AC_LINK_IFELSE($testprog_203, [acx_libxc_version=203, acx_libxc_ok=yes], [])
-AC_LINK_IFELSE($testprog_21,  [acx_libxc_version=210, acx_libxc_ok=yes], [])
+AC_LINK_IFELSE($testprog_203, [acx_libxc_version=203, acx_libxc_ok=no ], [])
+AC_LINK_IFELSE($testprog_21,  [acx_libxc_version=210, acx_libxc_ok=no ], [])
 AC_LINK_IFELSE($testprog_4x,  [acx_libxc_version=400, acx_libxc_ok=no ], [])
+AC_LINK_IFELSE($testprog_5x,  [acx_libxc_version=5,   acx_libxc_ok=yes ], [])
 AC_DEFINE_UNQUOTED([LIBXC_VERSION],[$acx_libxc_version],[Defined the LIBXC version.])
-AC_MSG_RESULT([Found external LibXC version=$acx_libxc_version (should be 2xx and >= 203)])
+AC_MSG_RESULT([Found external LibXC version=$acx_libxc_version (should be 5)])
 fi
 
 dnl Finally, execute ACTION-IF-FOUND/ACTION-IF-NOT-FOUND:
@@ -180,12 +177,10 @@ fi
 if test x"$acx_libxc_ok" = xno; then
   have_configured="no"
   internal_libxc="yes"
-  # version y2.0.3
-  #LIBXC_LIBS="-L${extlibs_path}/${FCKIND}/${FC}/lib -lxc"
-  # version 2.2.3 is used
-  LIBXC_LIBS="${extlibs_path}/${FCKIND}/${FC}/lib/libxcf90.a ${extlibs_path}/${FCKIND}/${FC}/lib/libxc.a"
+  # version 5 is used
+  LIBXC_LIBS="${extlibs_path}/${FCKIND}/${FC}/lib/libxcf90.a ${extlibs_path}/${FCKIND}/${FC}/lib/libxcf03.a  ${extlibs_path}/${FCKIND}/${FC}/lib/libxc.a"
   LIBXC_INCS="$IFLAG${extlibs_path}/${FCKIND}/${FC}/include"
-  if test -e "${extlibs_path}/${FCKIND}/${FC}/lib/libxc.a" && test -e "${extlibs_path}/${FCKIND}/${FC}/lib/libxcf90.a"; then
+  if test -e "${extlibs_path}/${FCKIND}/${FC}/lib/libxc.a" && test -e "${extlibs_path}/${FCKIND}/${FC}/lib/libxcf90.a" && test -e ${extlibs_path}/${FCKIND}/${FC}/lib/libxcf03.a; then
     compile_libxc="no"
     AC_MSG_RESULT([Compatible external LibXC not found/specified. Found internal already compiled.])
   else

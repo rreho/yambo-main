@@ -1,5 +1,5 @@
 !
-!        Copyright (C) 2000-2021 the YAMBO team
+!        Copyright (C) 2000-2022 the YAMBO team
 !              http://www.yambo-code.org
 !
 ! Authors (see AUTHORS file for details): AM CA DS
@@ -38,10 +38,11 @@ subroutine RT_driver(E,X,k,q,Dip)
  use FFT_m,          ONLY:fft_size
  use interfaces,     ONLY:WF_load,WF_free
  use R_lattice,      ONLY:bz_samp,qindx_free
- use IO_m,           ONLY:OP_WR_CL,NONE,io_control
+ use IO_int,         ONLY:io_control,IO_and_Messaging_switch
+ use IO_m,           ONLY:OP_WR_CL,NONE,io_COLLs
  use hamiltonian,    ONLY:WF_G_max,WF_Go_indx,rho_n,magn_n,&
 &                         H_potential,H_kind,H_xc_functional,H_perturbation
- use RT_control,     ONLY:RT_control_alloc,RT_control_free,ID,&
+ use RT_control,     ONLY:RT_control_alloc,RT_control_free,&
 &                         NE_i_start_time,RT_carriers_object,RT_apply
  use real_time,      ONLY:RT_potential,RT_kind,RT_xc_functional,RT_perturbation,&
 &                         NE_steps,RT_step,G_lesser,RT_bands,&
@@ -55,9 +56,8 @@ subroutine RT_driver(E,X,k,q,Dip)
  use fields,          ONLY:A_tot,Efield
  use collision_ext,   ONLY:HXC_COLL_element,GW_NEQ_COLL_element,COLLISIONS_have_HARTREE
  use QP_CTL_m,        ONLY:QP_apply
- use parallel_int,    ONLY:PP_bcast,PP_redux_wait,PARALLEL_global_indexes,PARALLEL_WF_distribute,PARALLEL_WF_index
+ use parallel_int,    ONLY:PP_bcast,PP_wait,PARALLEL_global_indexes,PARALLEL_WF_distribute,PARALLEL_WF_index
  use parallel_m,      ONLY:PAR_IND_WF_b,PAR_IND_WF_k,PAR_IND_DIPk_ibz,PAR_IND_B_mat,PAR_COM_Xk_ibz_INDEX
- use IO_m,            ONLY:IO_and_Messaging_switch,io_COLLs
  use units,           ONLY:FS2AUT
  use RT_lifetimes,    ONLY:l_initial_equilibrium
  !
@@ -72,7 +72,7 @@ subroutine RT_driver(E,X,k,q,Dip)
  !
  ! Work Space
  !
- integer           :: io_REF,io_err,i_t
+ integer           :: i_t
  logical           :: LT_pump
  character(lchlen) :: sec_title
  real(SP)          :: OBSERVABLES(25)
@@ -80,6 +80,7 @@ subroutine RT_driver(E,X,k,q,Dip)
  !
  ! I/O
  !
+ integer           :: io_err,ID
  integer, external :: io_RT_components
  !
  ! Timing windows
@@ -106,10 +107,10 @@ if (l_phel_scatt)                   sec_title=trim(sec_title)//'+ph-el'
  RT_perturbation =H_perturbation
  !
  call section('*',trim(RT_potential)//' Real-Time Dynamics '//trim(sec_title))
+ !############################################################################
  !
- !
- call section('+','Initialization')
- !#################################
+ call section('+','Pre-Initialization')
+ !######################################
  !
  ! Check if RT_bands respect levels degeneracy...
  call LEVELS_respect_degenerations(RT_bands,E,.FALSE.)
@@ -134,6 +135,9 @@ if (l_phel_scatt)                   sec_title=trim(sec_title)//'+ph-el'
  !
  ! Dipoles
  !=========
+ call section('=','Dipoles')
+ !##########################
+ !
  call DIPOLE_dimensions(E,Dip,RT_bands,(/0._SP,0._SP,0._SP/))
  call DIPOLE_IO(k,E,Dip,'read ',io_err,'RT')
  !
@@ -143,8 +147,8 @@ if (l_phel_scatt)                   sec_title=trim(sec_title)//'+ph-el'
  !
  call RT_apply(RT_bands,E,k,what="G",VERBOSE=.true.)
  !
- ! Core initialization
- !
+ call section('=','Initialization')
+ !#################################
  call RT_initialize(E,k,q)
  !
  ! Dipoles & WF dimensions
@@ -219,6 +223,7 @@ if (l_phel_scatt)                   sec_title=trim(sec_title)//'+ph-el'
  !
  ! Reference lifetimes and/or G_lesser
  !=====================================
+#if defined _RT_SCATT
  !
  if (NE_i_start_time==1) then
    !
@@ -230,12 +235,14 @@ if (l_phel_scatt)                   sec_title=trim(sec_title)//'+ph-el'
    !
    call RT_carriers_object(RT_carriers,WHAT='fill_ref')
    !
-   call io_control(ACTION=OP_WR_CL,COM=NONE,SEC=(/1,2/),ID=ID(8))
-   io_REF=io_RT_components('REF',ID(8))
+   call io_control(ACTION=OP_WR_CL,COM=NONE,SEC=(/1,2/),ID=ID)
+   io_err=io_RT_components('REFERENCE',ID)
    !
    call msg('l','done')
    !
  endif
+ !
+#endif
  !
  l_initial_equilibrium=.FALSE.
  !
@@ -293,7 +300,9 @@ if (l_phel_scatt)                   sec_title=trim(sec_title)//'+ph-el'
    !
    ! Calculate all relaxation and dissipation terms
    !===============================================
+#if defined _RT_SCATT
    call RT_relaxation(E,k,q,NE_time)
+#endif
    !
    ! Write DBs and output
    !=====================
@@ -364,7 +373,7 @@ if (l_phel_scatt)                   sec_title=trim(sec_title)//'+ph-el'
        !
      else if (steps>0) then
        !
-       call PP_redux_wait()
+       call PP_wait()
        !
        if (NE_i_time>LT_pump_steps+1.and.LT_pump) then
          LT_pump=.FALSE.

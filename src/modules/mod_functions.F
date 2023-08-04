@@ -1,5 +1,5 @@
 !
-!        Copyright (C) 2000-2021 the YAMBO team
+!        Copyright (C) 2000-2022 the YAMBO team
 !              http://www.yambo-code.org
 !
 ! Authors (see AUTHORS file for details): AM
@@ -59,7 +59,7 @@ module functions
    end function infinity
    !
    logical function NAN(E)
-#if defined(_XLF) || defined(_PGI)
+#if defined(_XLF) || defined(_PGI) || defined(_NV)
      use ieee_arithmetic
      real(SP) :: E
      NAN= ieee_is_nan(E)
@@ -212,13 +212,23 @@ module functions
    ! Boltzman function
    !----------------
    !
-   pure function boltzman_f(Eb)
+   function boltzman_f(Eb)
      !
-     use D_lattice, ONLY:Bose_Temp
+     use D_lattice, ONLY:Boltz_Temp
+     use units,     ONLY:HA2EV,HA2KEL
      real(SP), intent(in):: Eb
      real(SP)            :: boltzman_f
      !
-     boltzman_f=exp(-Eb/Bose_Temp)
+     real(SP) :: E_small=0.005/HA2EV  ! Threashold for degenerate excitons
+     real(SP) :: T_small=1._SP/HA2KEL
+     !
+     if(abs(Eb)>E_small.and.abs(Boltz_Temp)>T_small) then
+       boltzman_f=exp(-Eb/Boltz_Temp)  ! Normal case
+     elseif(abs(Eb)>E_small.and.abs(Boltz_Temp)<=T_small) then
+       boltzman_f=0._SP  ! Case  E>0 but T=0
+     elseif(abs(Eb)<E_small) then
+       boltzman_f=1._SP  ! Limit E=0 
+     endif
      !
    end function
 
