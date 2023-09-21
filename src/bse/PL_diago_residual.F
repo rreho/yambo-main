@@ -42,7 +42,9 @@ subroutine PL_diago_herm_residual(BS_mat,BS_R_PL)
  use BS_solvers,     ONLY:BSS_eh_f_RES,BSS_n_eig, BS_E
  use PHOTOLUM,       ONLY:BSS_dipoles_PL,BSS_PL_f
  use functions,      ONLY:boltzman_f
+#if defined _RT
  use RT_control,     ONLY:NEQ_Residuals
+#endif
  use D_lattice,      ONLY:Boltz_Temp
  !
  implicit none
@@ -81,11 +83,13 @@ subroutine PL_diago_herm_residual(BS_mat,BS_R_PL)
  ! 1=> left
  ! 2=> right
  !
+#if defined _RT
  if (NEQ_Residuals .and. (Boltz_Temp .gt. 0) ) then
    call error('The user can specify either boltzmann or external residual occupations, not both')
  endif
  ! 
  if (NEQ_Residuals) call msg('s','Running with NEQ Residuals')
+#endif
  if (Boltz_Temp .gt. 0)  call msg('s','Running with Boltz excitonic occupations')
  !
  do i_c=1,BS_dip_size
@@ -112,6 +116,7 @@ subroutine PL_diago_herm_residual(BS_mat,BS_R_PL)
   !                       
   ! R_over_R_x_A = R<_j/R_j A^r_ij
   ! Here I create an If statement if I want to populate L lesser with electornic or excitonic populations
+#if defined _RT
   if (NEQ_Residuals) then
     !                       
     ! R_over_R_x_A = R<_j/R_j A^l_j
@@ -129,6 +134,7 @@ subroutine PL_diago_herm_residual(BS_mat,BS_R_PL)
     adA_x_R_over_R_x_A=boltzman_f(real(BS_E(i_l)-BS_E(1)))
     !
   endif
+#endif
   !
   BS_R_PL(1,i_l)=BS_R_PL(1,i_l)*adA_x_R_over_R_x_A(1) !resonant
   BS_R_PL(2,i_l)=BS_R_PL(2,i_l)*adA_x_R_over_R_x_A(2) !resonant
